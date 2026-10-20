@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>タイムカード計算</title>
+<meta name="theme-color" content="#2e7d32">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="タイムカード">
+<link rel="icon" id="favicon">
+<link rel="apple-touch-icon" id="touchicon">
+<link rel="manifest" id="manifest">
+<style>
+:root{
+  --bg:#f4f7f2;--card:#fff;--ink:#1d2a1f;--sub:#5f6f62;--line:#dfe6dc;
+  --pri:#2e7d32;--pri2:#e8f3e8;--warn:#b26a00;--warnbg:#fff4dc;--err:#c62828;--errbg:#fdecec;
+  --hol:#eef1ee;--blue:#1565c0;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP","Meiryo",sans-serif;
+  font-size:15px;-webkit-text-size-adjust:100%}
+header{position:sticky;top:0;z-index:20;background:var(--pri);color:#fff;
+  padding:calc(env(safe-area-inset-top) + 10px) 16px 0}
+header h1{margin:0;font-size:17px;font-weight:700;letter-spacing:.02em}
+.tabs{display:flex;gap:4px;margin-top:8px}
+.tabs button{flex:1;border:0;background:transparent;color:#cfe8d0;padding:9px 0 11px;font-size:14px;font-weight:600;border-bottom:3px solid transparent}
+.tabs button.on{color:#fff;border-bottom-color:#fff}
+main{padding:12px 12px 140px;max-width:760px;margin:0 auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+.card h2{font-size:15px;margin:0 0 10px}
+label{display:block;font-size:12px;color:var(--sub);margin:10px 0 4px}
+input,select,textarea{width:100%;font:inherit;font-size:16px;padding:10px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink)}
+textarea{min-height:120px;font-size:14px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:0;border-radius:10px;padding:12px 14px;font:inherit;font-weight:700;background:var(--pri);color:#fff;width:100%}
+.btn.sub{background:var(--pri2);color:var(--pri)}
+.btn.ghost{background:#fff;color:var(--ink);border:1px solid var(--line)}
+.btn:disabled{opacity:.5}
+.btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.who{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.chip{font-size:12px;padding:4px 9px;border-radius:999px;background:var(--pri2);color:var(--pri);font-weight:700}
+.chip.gray{background:#eef0ee;color:var(--sub)}
+.note{font-size:12px;color:var(--sub);line-height:1.6;margin:8px 0 0}
+.msg{font-size:13px;padding:10px 12px;border-radius:8px;margin-top:10px;display:none;line-height:1.5}
+.msg.ok{display:block;background:var(--pri2);color:var(--pri)}
+.msg.err{display:block;background:var(--errbg);color:var(--err)}
+.msg.info{display:block;background:#eef4fb;color:var(--blue)}
+
+/* 日別 */
+.daytools{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+.daytools select{width:auto;flex:1;padding:8px;font-size:14px}
+.daytools span{font-size:12px;color:var(--sub);white-space:nowrap}
+.day{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-bottom:6px;background:#fff}
+.day.hol{background:var(--hol)}
+.day.flag{border-color:#f0c36d;background:var(--warnbg)}
+.d1{display:grid;grid-template-columns:58px 64px 1fr 1fr;gap:6px;align-items:center}
+.dt{font-weight:700;font-size:14px;line-height:1.1}
+.dt small{display:block;font-weight:400;color:var(--sub);font-size:11px}
+.dt .sun{color:var(--err)}.dt .sat{color:var(--blue)}
+.d1 select,.d1 input{padding:8px 6px;font-size:16px;text-align:center}
+.d1 input.hand{border-color:#e0a030;background:#fffaf0}
+.d2{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:6px;font-size:12px;color:var(--sub)}
+.d2 b{color:var(--ink);font-variant-numeric:tabular-nums}
+.d2 .ot b{color:var(--warn)}
+.d2 .sp{display:flex;align-items:center;gap:4px}
+.d2 .sp input{width:18px;height:18px;padding:0}
+.d2 .nt{flex:1 1 100%}
+.d2 .nt input{padding:6px 8px;font-size:14px}
+.badge{font-size:11px;padding:2px 6px;border-radius:6px;background:#ffe2a8;color:#7a4b00;font-weight:700}
+
+/* 合計バー */
+.sumbar{position:fixed;left:0;right:0;bottom:0;z-index:30;background:#fff;border-top:1px solid var(--line);
+  padding:10px 12px calc(env(safe-area-inset-bottom) + 10px);box-shadow:0 -4px 14px rgba(0,0,0,.06)}
+.sumin{max-width:760px;margin:0 auto}
+.sums{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center;margin-bottom:8px}
+.sums div{font-size:11px;color:var(--sub)}
+.sums b{display:block;font-size:16px;color:var(--ink);font-variant-numeric:tabular-nums}
+.sums .tot b{color:var(--pri)}
+.hide{display:none!important}
+.legend{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:12px;color:var(--sub);margin-top:8px}
+.list{font-size:13px}
+.list div{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<header>
+  <h1>タイムカード計算</h1>
+  <div class="tabs">
+    <button data-tab="calc" class="on">計算</button>
+    <button data-tab="list">保存済み</button>
+    <button data-tab="set">設定</button>
+  </div>
+</header>
+
+<main>
+<!-- 計算 -->
+<section id="tab-calc">
+  <div class="card">
+    <h2>1. 誰の・いつの分</h2>
+    <label>氏名</label>
+    <select id="name"><option value="">（設定で接続してください）</option></select>
+    <div class="who" id="who"></div>
+    <label>給与期間（開始月の16日〜翌月15日）</label>
+    <input type="month" id="month">
+    <p class="note" id="periodText"></p>
+  </div>
+
+  <div class="card">
+    <h2>2. タイムカードを読み込む</h2>
+    <div class="btns">
+      <button class="btn" id="btnPhoto">📷 写真・PDF</button>
+      <button class="btn sub" id="btnPaste">✍️ テキスト貼付</button>
+    </div>
+    <input type="file" id="file" accept="image/*,application/pdf" multiple class="hide">
+    <div id="pasteBox" class="hide">
+      <label>1行に1日。例）9/17 06:52-20:45</label>
+      <textarea id="pasteText" placeholder="9/16 7:30-17:15&#10;9/17 06:52-20:45"></textarea>
+      <button class="btn" id="btnParse" style="margin-top:8px">反映する</button>
+    </div>
+    <div class="btns">
+      <button class="btn ghost" id="btnLoad">保存済みを開く</button>
+      <button class="btn ghost" id="btnClear">クリア</button>
+    </div>
+    <div class="msg" id="msgIn"></div>
+  </div>
+
+  <div class="card">
+    <h2>3. 日ごとの確認</h2>
+    <div class="daytools">
+      <span>出勤日をまとめて</span>
+      <select id="bulk">
+        <option value="">区分を選ぶ…</option>
+        <option value="T">T 通常</option><option value="A">A 特A（田植え）</option>
+        <option value="B">B 特B（稲刈り）</option><option value="S">S 特S（サマータイム）</option><option value="P">P パート</option>
+      </select>
+    </div>
+    <div class="legend">
+      <span>T 通常</span><span>A 特A</span><span>B 特B</span><span>S 特S</span><span>P パート</span>
+      <span><span class="badge">手書き</span> <span class="badge">要確認</span> は黄色の行</span>
+    </div>
+    <div id="days" style="margin-top:10px"></div>
+  </div>
+</section>
+
+<!-- 保存済み -->
+<section id="tab-list" class="hide">
+  <div class="card">
+    <h2>保存済みの月次集計</h2>
+    <button class="btn sub" id="btnList">一覧を更新</button>
+    <div class="list" id="list" style="margin-top:10px"></div>
+    <p class="note">集計はスプレッドシートの「月次集計」シート、日ごとの内容は「勤怠明細」シートにあります。Excelが必要なときは、スプレッドシートの「ファイル → ダウンロード → Microsoft Excel」で出せます。</p>
+  </div>
+</section>
+
+<!-- 設定 -->
+<section id="tab-set" class="hide">
+  <div class="card">
+    <h2>接続</h2>
+    <label>GASのウェブアプリURL</label>
+    <input id="url" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off">
+    <label>合言葉（APP_KEY）</label>
+    <input id="key" type="password" autocomplete="off">
+    <button class="btn" id="btnConnect" style="margin-top:12px">保存して接続テスト</button>
+    <div class="msg" id="msgSet"></div>
+  </div>
+  <div class="card">
+    <h2>計算ルール</h2>
+    <p class="note">
+      ① 8:00〜17:15（17:00〜17:15は整理整頓）。8:00前の打刻は8:00から。<br>
+      ② 研修生：午前30分・昼1時間・午後30分は無給。取れなかった日は「特例」にチェック→午前・午後は有給。<br>
+      ③ 一般作業員・外注作業員：午前15分・午後15分は有給、昼1時間は無給。<br>
+      ④ 残業：17:15から30分区切り（17:45・18:15・18:45…）。割増と丸めはスプレッドシートの「設定」シート。<br>
+      A・B：打刻直後の刻み（5:15・5:45・6:15・6:45・7:15）から。7:15より後は8:00から。<br>
+      S：打刻直後の刻み（5:00・5:30…7:30）〜13:00。7:30より後は8:00から。8:00〜9:00の休憩は有給。<br>
+      P（パート）：9:00〜16:00。9:00前の打刻は9:00から。昼1時間は無給、午前・午後の休憩なし。16:00以降は30分区切りの延長で、割増なし。
+    </p>
+    <p class="note" id="cfgText"></p>
+  </div>
+</section>
+</main>
+
+<div class="sumbar" id="sumbar">
+  <div class="sumin">
+    <div class="sums">
+      <div>出勤<b id="sDays">0日</b></div>
+      <div>定時内<b id="sReg">0:00</b></div>
+      <div>残業<b id="sOt">0:00</b></div>
+      <div class="tot">支給<b id="sTot">0円</b></div>
+    </div>
+    <button class="btn" id="btnSave">スプレッドシートに保存</button>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+const LS = {
+  get(k, d){ try{ const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+};
+
+/* ---------- アイコン・マニフェスト（1ファイルで完結） ---------- */
+(function icons(){
+  const c = document.createElement('canvas'); c.width = c.height = 180;
+  const g = c.getContext('2d');
+  g.fillStyle = '#2e7d32'; g.fillRect(0,0,180,180);
+  g.fillStyle = '#fff'; g.beginPath(); g.roundRect ? g.roundRect(38,30,104,124,12) : g.rect(38,30,104,124); g.fill();
+  g.fillStyle = '#2e7d32';
+  for (let i=0;i<5;i++) g.fillRect(52, 50 + i*20, 76, 6);
+  g.fillStyle = '#f9a825'; g.beginPath(); g.arc(132,132,26,0,Math.PI*2); g.fill();
+  g.strokeStyle = '#fff'; g.lineWidth = 5; g.beginPath(); g.moveTo(132,118); g.lineTo(132,132); g.lineTo(142,138); g.stroke();
+  const png = c.toDataURL('image/png');
+  $('#favicon').href = png; $('#touchicon').href = png;
+  const mf = { name:'タイムカード計算', short_name:'タイムカード', start_url: location.href.split('#')[0],
+    display:'standalone', background_color:'#f4f7f2', theme_color:'#2e7d32',
+    icons:[{ src: png, sizes:'180x180', type:'image/png' }] };
+  $('#manifest').href = 'data:application/manifest+json,' + encodeURIComponent(JSON.stringify(mf));
+})();
+
+/* ---------- 状態 ---------- */
+const S = {
+  url: LS.get('tc_url',''), key: LS.get('tc_key',''),
+  wages: LS.get('tc_wages', []), cfg: LS.get('tc_cfg', { rate:1.25, round:'切り捨て' }),
+  rows: []    // {date, dow, code, in, out, special, note, inHand, outHand, flag}
+};
+
+/* ---------- タブ ---------- */
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
+  ['calc','list','set'].forEach(t => $('#tab-'+t).classList.toggle('hide', t !== b.dataset.tab));
+  $('#sumbar').classList.toggle('hide', b.dataset.tab !== 'calc');
+  if (b.dataset.tab === 'list') loadList();
+});
+
+/* ---------- 時刻ユーティリティ ---------- */
+function parseT(s){
+  if (s === null || s === undefined) return null;
+  s = String(s).trim().replace(/[：．.]/g, ':').replace(/[０-９]/g, d => String.fromCharCode(d.charCodeAt(0) - 0xFEE0));
+  if (!s) return null;
+  let h, m;
+  if (/^\d{1,2}:\d{1,2}$/.test(s)) { [h, m] = s.split(':').map(Number); }
+  else if (/^\d{3,4}$/.test(s)) { h = Math.floor(+s / 100); m = +s % 100; }
+  else return null;
+  if (h > 29 || m > 59) return null;
+  return h * 60 + m;
+}
+const fmtT = m => m === null || m === undefined ? '' : Math.floor(m/60) + ':' + String(m%60).padStart(2,'0');
+const fmtH = m => Math.floor(m/60) + ':' + String(m%60).padStart(2,'0');
+const yen = n => Math.round(n).toLocaleString('ja-JP') + '円';
+const pad = n => String(n).padStart(2,'0');
+const ymd = d => d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
+const DOW = ['日','月','火','水','木','金','土'];
+
+/* ---------- 期間 ---------- */
+function defaultMonth(){
+  const t = new Date();
+  const d = new Date(t.getFullYear(), t.getMonth() - (t.getDate() > 15 ? 1 : 2), 1);
+  return d.getFullYear() + '-' + pad(d.getMonth()+1);
+}
+function period(){
+  const [y, m] = ($('#month').value || defaultMonth()).split('-').map(Number);
+  const s = new Date(y, m-1, 16), e = new Date(y, m, 15);
+  return { start: ymd(s), end: ymd(e), s, e };
+}
+
+/* ---------- 計算（ルール①〜④・A/B/S） ---------- */
+function person(){ return S.wages.find(w => w.name === $('#name').value) || null; }
+function defCode(){ const p = person(); return p && p.cat === 'パート' ? 'P' : ($('#bulk').value || 'T'); }
+
+function calcDay(r, cat){
+  const code = r.code, inM = parseT(r.in), outM = parseT(r.out);
+  if (!code || inM === null || outM === null) return null;
+  let st;
+  if (code === 'T') st = Math.max(480, inM);
+  else if (code === 'A' || code === 'B') st = inM <= 435 ? 315 + Math.ceil(Math.max(0, inM - 315) / 30) * 30 : Math.max(480, inM);
+  else if (code === 'S') st = inM <= 450 ? Math.max(300, Math.ceil(inM / 30) * 30) : Math.max(480, inM);
+  else if (code === 'P') st = Math.max(540, inM);                       // パート 9:00から
+  else return null;
+  const endReg = code === 'S' ? Math.min(outM, 780) : code === 'P' ? Math.min(outM, 960) : Math.min(outM, 1035);
+  const ov = (a, b) => Math.max(0, Math.min(endReg, b) - Math.max(st, a));
+  let ded = 0;
+  if (code !== 'S') {
+    ded += ov(720, 780);                                   // 昼 12:00-13:00 無給（全員）
+    if (cat === '研修生' && code !== 'P' && !r.special) ded += ov(600, 630) + ov(900, 930);  // 研修生 午前・午後
+  }
+  const reg = Math.max(0, endReg - st - ded);
+  let ot = 0;
+  if (code !== 'S') {
+    const raw = Math.max(0, outM - (code === 'P' ? 960 : 1035));   // P は16:00から延長（割増なし）
+    ot = S.cfg.round === '切り上げ' ? Math.ceil(raw / 30) * 30 : Math.floor(raw / 30) * 30;
+  }
+  return { st, reg, ot, mult: code === 'P' ? 1 : null };
+}
+
+function recalc(){
+  const p = person(), cat = p ? p.cat : '一般作業員', wage = p ? p.wage : 0, rate = S.cfg.rate;
+  let days = 0, reg = 0, ot = 0, base = 0, otp = 0;
+  const cnt = { T:0, A:0, B:0, S:0, P:0 };
+  S.rows.forEach((r, i) => {
+    const c = calcDay(r, cat);
+    const el = document.getElementById('res' + i);
+    if (!c) { if (el) el.innerHTML = r.code ? '<span>時刻を入力</span>' : '<span>休み</span>'; r._c = null; return; }
+    r._c = c;
+    const b = c.reg / 60 * wage, o = c.ot / 60 * wage * (c.mult || rate);
+    days++; reg += c.reg; ot += c.ot; base += b; otp += o; cnt[r.code]++;
+    if (el) el.innerHTML = `<span>開始 <b>${fmtT(c.st)}</b></span><span>定時内 <b>${fmtH(c.reg)}</b></span>`
+      + `<span class="ot">${r.code === 'P' ? '延長' : '残業'} <b>${fmtH(c.ot)}</b></span><span>日計 <b>${yen(b + o)}</b></span>`;
+  });
+  $('#sDays').textContent = days + '日';
+  $('#sReg').textContent = fmtH(reg);
+  $('#sOt').textContent = fmtH(ot);
+  $('#sTot').textContent = yen(base + otp);
+  S.sum = { days, regMin: reg, otMin: ot, base, otPay: otp, cnt };
+  saveDraft();
+}
+
+/* ---------- 日別の行 ---------- */
+function blankRows(){
+  const { s, e } = period(), out = [];
+  for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1))
+    out.push({ date: ymd(d), dow: DOW[d.getDay()], code:'', in:'', out:'', special:false, note:'' });
+  return out;
+}
+function draftKey(){ return 'tc_draft_' + $('#name').value + '_' + period().start; }
+function saveDraft(){ if ($('#name').value) LS.set(draftKey(), S.rows.map(({_c, ...r}) => r)); }
+function loadDraft(){
+  const d = LS.get(draftKey(), null), base = blankRows();
+  if (d) base.forEach(r => { const x = d.find(y => y.date === r.date); if (x) Object.assign(r, x); });
+  S.rows = base;
+}
+
+function render(){
+  const cat = (person() || {}).cat;
+  const box = $('#days'); box.innerHTML = '';
+  S.rows.forEach((r, i) => {
+    const [, mm, dd] = r.date.split('-').map(Number);
+    const dowCls = r.dow === '日' ? 'sun' : r.dow === '土' ? 'sat' : '';
+    const flag = r.inHand || r.outHand || r.flag;
+    const div = document.createElement('div');
+    div.className = 'day' + (!r.code ? ' hol' : '') + (flag ? ' flag' : '');
+    div.innerHTML = `
+      <div class="d1">
+        <div class="dt">${mm}/${dd}<small class="${dowCls}">${r.dow}</small></div>
+        <select data-k="code">${(cat === 'パート' ? ['','P'] : ['','T','A','B','S']).map(c => `<option value="${c}" ${r.code===c?'selected':''}>${c||'休'}</option>`).join('')}</select>
+        <input data-k="in" inputmode="numeric" placeholder="出勤" value="${r.in||''}" class="${r.inHand?'hand':''}">
+        <input data-k="out" inputmode="numeric" placeholder="退勤" value="${r.out||''}" class="${r.outHand?'hand':''}">
+      </div>
+      <div class="d2">
+        ${r.inHand ? '<span class="badge">出勤 手書き</span>' : ''}${r.outHand ? '<span class="badge">退勤 手書き</span>' : ''}${r.flag ? '<span class="badge">要確認</span>' : ''}
+        <span id="res${i}"></span>
+        ${cat === '研修生' ? `<label class="sp"><input type="checkbox" data-k="special" ${r.special?'checked':''}>休憩特例</label>` : ''}
+        <div class="nt"><input data-k="note" placeholder="備考" value="${(r.note||'').replace(/"/g,'&quot;')}"></div>
+      </div>`;
+    div.querySelectorAll('[data-k]').forEach(inp => {
+      const k = inp.dataset.k;
+      const ev = (inp.tagName === 'SELECT' || inp.type === 'checkbox') ? 'change' : 'input';
+      inp.addEventListener(ev, () => {
+        r[k] = inp.type === 'checkbox' ? inp.checked : inp.value;
+        if (k === 'code') { div.classList.toggle('hol', !r.code); if (r.code && !r.in) {} }
+        if ((k === 'in' || k === 'out') && r.in && r.out && !r.code) {
+          r.code = defCode(); div.querySelector('[data-k=code]').value = r.code; div.classList.remove('hol');
+        }
+        recalc();
+      });
+      if (k === 'in' || k === 'out') inp.addEventListener('blur', () => {
+        const m = parseT(inp.value); if (m !== null) { inp.value = fmtT(m); r[k] = inp.value; recalc(); }
+      });
+    });
+    box.appendChild(div);
+  });
+  recalc();
+}
+
+/* ---------- 取り込み（OCR結果・テキスト） ---------- */
+function applyDays(list){   // [{m?, d, in, out, inHand, outHand, flag, note}]
+  const { s } = period();
+  let n = 0;
+  list.forEach(x => {
+    let row;
+    if (x.m) row = S.rows.find(r => { const [, mm, dd] = r.date.split('-').map(Number); return mm === x.m && dd === x.d; });
+    else row = S.rows.find(r => +r.date.split('-')[2] === x.d);
+    if (!row) return;
+    const inM = parseT(x.in), outM = parseT(x.out);
+    if (inM !== null) row.in = fmtT(inM);
+    if (outM !== null) row.out = fmtT(outM < 720 && inM !== null && outM <= inM ? outM + 720 : outM);
+    if (!row.code && (row.in || row.out)) row.code = defCode();
+    row.inHand = !!x.inHand; row.outHand = !!x.outHand;
+    row.flag = !!x.flag || (row.code && (!row.in || !row.out));
+    if (x.note) row.note = x.note;
+    n++;
+  });
+  render();
+  return n;
+}
+
+function parsePaste(txt){
+  const out = [];
+  txt.split(/\n/).forEach(line => {
+    const t = line.replace(/[０-９]/g, d => String.fromCharCode(d.charCodeAt(0) - 0xFEE0));
+    const md = t.match(/(\d{1,2})\s*[\/月]\s*(\d{1,2})/);
+    if (!md) return;
+    const rest = t.slice(md.index + md[0].length);
+    const times = rest.match(/\d{1,2}[:：]\d{2}/g) || [];
+    out.push({ m: +md[1], d: +md[2], in: times[0] || '', out: times[1] || '',
+      inHand: /手書き/.test(rest) && !/退勤手書き/.test(rest),
+      outHand: /退勤手書き/.test(rest) || (/手書き/.test(rest) && times.length > 1 && rest.indexOf('手書き') > rest.indexOf(times[1])),
+      flag: /\?|？|要確認/.test(rest) });
+  });
+  return out;
+}
+
+/* ---------- 通信 ---------- */
+async function api(action, payload = {}){
+  if (!S.url) throw new Error('設定タブでGASのURLを登録してください');
+  const res = await fetch(S.url, { method:'POST', body: JSON.stringify({ action, key: S.key, ...payload }) });
+  const j = await res.json();
+  if (!j.ok) throw new Error(j.error || '通信エラー');
+  return j;
+}
+function msg(el, type, text){ const m = $(el); m.className = 'msg ' + type; m.innerHTML = text; }
+
+async function init(silent){
+  try {
+    const j = await api('init');
+    S.wages = j.wages; S.cfg = j.config;
+    LS.set('tc_wages', S.wages); LS.set('tc_cfg', S.cfg);
+    fillNames();
+    if (!silent) msg('#msgSet', 'ok', `接続OK：${S.wages.length}名 / 割増 ${S.cfg.rate} / 残業の丸め ${S.cfg.round}`);
+  } catch (e) {
+    if (!silent) msg('#msgSet', 'err', e.message);
+  }
+  $('#cfgText').textContent = `現在：割増率 ${S.cfg.rate} ／ 残業の丸め ${S.cfg.round}`;
+}
+function fillNames(){
+  const cur = $('#name').value || LS.get('tc_lastName', '');
+  $('#name').innerHTML = '<option value="">氏名を選ぶ</option>' +
+    S.wages.map(w => `<option ${w.name===cur?'selected':''}>${w.name}</option>`).join('');
+  onPersonChange();
+}
+function onPersonChange(){
+  const p = person();
+  $('#who').innerHTML = p ? `<span class="chip">${p.cat}</span><span class="chip gray">時給 ${p.wage.toLocaleString()}円</span>` : '';
+  LS.set('tc_lastName', $('#name').value);
+  loadDraft(); render();
+}
+
+/* ---------- ファイル → OCR ---------- */
+function fileToB64(file){
+  return new Promise((ok, ng) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = ng; r.readAsDataURL(file); });
+}
+function shrink(file){   // 写真は長辺2000pxのJPEGに縮小（通信量とAPIの負担を減らす）
+  return new Promise((ok, ng) => {
+    const img = new Image(), url = URL.createObjectURL(file);
+    img.onload = () => {
+      const k = Math.min(1, 2000 / Math.max(img.width, img.height));
+      const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      ok(c.toDataURL('image/jpeg', 0.85).split(',')[1]);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); ng(new Error('画像を開けませんでした')); };
+    img.src = url;
+  });
+}
+
+$('#btnPhoto').onclick = () => {
+  if (!$('#name').value) return msg('#msgIn', 'err', '先に氏名を選んでください');
+  $('#file').click();
+};
+$('#file').onchange = async e => {
+  const files = [...e.target.files]; e.target.value = '';
+  if (!files.length) return;
+  const p = period();
+  let total = 0;
+  for (const [i, f] of files.entries()) {
+    msg('#msgIn', 'info', `<span class="spin"></span> 読み取り中… (${i+1}/${files.length}) ${f.name}<br>30秒ほどかかることがあります`);
+    try {
+      const isPdf = f.type === 'application/pdf' || /\.pdf$/i.test(f.name);
+      if (isPdf && f.size > 15e6) throw new Error('PDFが大きすぎます（15MBまで）');
+      const data = isPdf ? await fileToB64(f) : await shrink(f);
+      const j = await api('ocr', { name: $('#name').value, periodStart: p.start, periodEnd: p.end, mime: isPdf ? 'application/pdf' : 'image/jpeg', data });
+      const rows = (j.result.rows || []).map(x => ({ d: +x.day, in: x.in, out: x.out, inHand: x.inHand, outHand: x.outHand, flag: x.uncertain, note: x.note }));
+      total += applyDays(rows);
+      if (j.result.name && j.result.name.replace(/\s/g,'') && !$('#name').value.includes(j.result.name.replace(/\s/g,'').slice(0,2)))
+        msg('#msgIn', 'info', `カードの氏名は「${j.result.name}」と読めました。選んだ氏名と合っているか確認してください。`);
+    } catch (err) {
+      msg('#msgIn', 'err', err.message); return;
+    }
+  }
+  msg('#msgIn', 'ok', `${total}日分を読み取りました。黄色の行（手書き・要確認）を写真と見比べてください。`);
+};
+
+$('#btnPaste').onclick = () => $('#pasteBox').classList.toggle('hide');
+$('#btnParse').onclick = () => {
+  if (!$('#name').value) return msg('#msgIn', 'err', '先に氏名を選んでください');
+  const n = applyDays(parsePaste($('#pasteText').value));
+  msg('#msgIn', n ? 'ok' : 'err', n ? `${n}日分を反映しました` : '日付と時刻が読み取れませんでした');
+};
+$('#btnClear').onclick = () => {
+  if (!confirm('この期間の入力を消しますか？（保存済みのデータは消えません）')) return;
+  S.rows = blankRows(); render(); msg('#msgIn', 'ok', 'クリアしました');
+};
+$('#btnLoad').onclick = async () => {
+  if (!$('#name').value) return msg('#msgIn', 'err', '先に氏名を選んでください');
+  msg('#msgIn', 'info', '<span class="spin"></span> 読み込み中…');
+  try {
+    const j = await api('load', { name: $('#name').value, periodStart: period().start });
+    if (!j.rows.length) return msg('#msgIn', 'info', 'この期間の保存データはありません');
+    S.rows = blankRows();
+    j.rows.forEach(x => { const r = S.rows.find(y => y.date === x.date); if (r) Object.assign(r, x); });
+    render(); msg('#msgIn', 'ok', `保存済みの ${j.rows.length}日分を開きました`);
+  } catch (e) { msg('#msgIn', 'err', e.message); }
+};
+$('#bulk').onchange = () => {
+  const v = $('#bulk').value; if (!v) return;
+  const isP = (person() || {}).cat === 'パート';
+  if (isP !== (v === 'P')) { $('#bulk').value = ''; return msg('#msgIn', 'err', isP ? 'パートさんの区分はPです' : 'Pはパートさん専用です'); }
+  S.rows.forEach(r => { if (r.code || r.in || r.out) r.code = v; });
+  render();
+};
+
+/* ---------- 保存 ---------- */
+$('#btnSave').onclick = async () => {
+  const p = person(); if (!p) return msg('#msgIn', 'err', '氏名を選んでください');
+  const bad = S.rows.filter(r => r.code && !r._c);
+  if (bad.length && !confirm(`時刻が入っていない出勤日が ${bad.length}日あります。このまま保存しますか？`)) return;
+  const flagged = S.rows.filter(r => r._c && (r.flag)).length;
+  if (flagged && !confirm(`「要確認」の日が ${flagged}日あります。確認済みとして保存しますか？`)) return;
+  const pr = period(), rate = S.cfg.rate;
+  const rows = S.rows.filter(r => r._c).map(r => {
+    const c = r._c, base = c.reg / 60 * p.wage, otPay = c.ot / 60 * p.wage * (c.mult || rate);
+    return { date: r.date, dow: r.dow, code: r.code, in: r.in, out: r.out, start: fmtT(c.st), special: !!r.special,
+      regHM: fmtH(c.reg), otHM: fmtH(c.ot), regH: +(c.reg/60).toFixed(2), otH: +(c.ot/60).toFixed(2),
+      base: Math.round(base), otPay: Math.round(otPay), total: Math.round(base + otPay),
+      note: [r.note, r.inHand ? '出勤手書き' : '', r.outHand ? '退勤手書き' : ''].filter(Boolean).join(' / ') };
+  });
+  const s = S.sum;
+  const summary = { days: s.days, T: s.cnt.T, A: s.cnt.A, B: s.cnt.B, S: s.cnt.S, P: s.cnt.P,
+    regH: +(s.regMin/60).toFixed(2), otH: +(s.otMin/60).toFixed(2),
+    base: Math.round(s.base), otPay: Math.round(s.otPay), total: Math.round(s.base + s.otPay) };
+  const btn = $('#btnSave'); btn.disabled = true; btn.innerHTML = '<span class="spin"></span> 保存中…';
+  try {
+    const j = await api('save', { name: p.name, cat: p.cat, wage: p.wage, rate, periodStart: pr.start, periodEnd: pr.end, rows, summary });
+    msg('#msgIn', 'ok', `保存しました（${j.saved}日分・${j.at}）。同じ氏名・期間は上書きされます。`);
+    $('#msgIn').scrollIntoView({ behavior:'smooth', block:'center' });
+  } catch (e) {
+    msg('#msgIn', 'err', '保存できませんでした：' + e.message + '<br>入力内容はこの端末に残っています。電波の良い所でもう一度押してください。');
+    $('#msgIn').scrollIntoView({ behavior:'smooth', block:'center' });
+  } finally { btn.disabled = false; btn.textContent = 'スプレッドシートに保存'; }
+};
+
+/* ---------- 保存済み一覧 ---------- */
+async function loadList(){
+  const box = $('#list'); box.innerHTML = '<span class="spin"></span>';
+  try {
+    const j = await api('periods');
+    box.innerHTML = j.list.length ? j.list.slice().reverse().map(x =>
+      `<div><span>${x.start.slice(0,7)}期　${x.name}（${x.cat}）</span><b>${Number(x.total||0).toLocaleString()}円</b></div>`).join('')
+      : '<p class="note">まだ保存はありません</p>';
+  } catch (e) { box.innerHTML = `<p class="note" style="color:var(--err)">${e.message}</p>`; }
+}
+$('#btnList').onclick = loadList;
+
+/* ---------- 設定 ---------- */
+$('#url').value = S.url; $('#key').value = S.key;
+$('#btnConnect').onclick = () => {
+  S.url = $('#url').value.trim(); S.key = $('#key').value.trim();
+  LS.set('tc_url', S.url); LS.set('tc_key', S.key);
+  msg('#msgSet', 'info', '<span class="spin"></span> 接続中…');
+  init(false);
+};
+
+/* ---------- 起動 ---------- */
+$('#month').value = LS.get('tc_month', defaultMonth());
+function showPeriod(){ const p = period(); $('#periodText').textContent = `${p.start.replace(/-/g,'/')} 〜 ${p.end.replace(/-/g,'/')}`; }
+$('#month').onchange = () => { LS.set('tc_month', $('#month').value); showPeriod(); loadDraft(); render(); };
+$('#name').onchange = onPersonChange;
+showPeriod();
+fillNames();
+if (S.url) init(true); else { msg('#msgIn', 'info', 'はじめに「設定」タブでGASのURLと合言葉を登録してください'); }
+})();
+</script>
+</body>
+</html>
