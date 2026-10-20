@@ -392,6 +392,13 @@ function applyDays(list){   // [{m?, d, in, out, inHand, outHand, flag, note}]
     if (!row.code && (row.in || row.out)) row.code = defCode();
     row.inHand = !!x.inHand; row.outHand = !!x.outHand;
     row.flag = !!x.flag || (row.code && (!row.in || !row.out));
+    // 読み間違いが疑われる時刻を自動で「要確認」に（例：6:57→8:57、7:00→10:00）
+    const odd = [];
+    const iM = parseT(row.in), oM = parseT(row.out);
+    const late = row.code === 'P' ? 555 : 470;          // P:9:15 / その他:7:50 より遅い出勤
+    if (iM !== null && (iM > late || iM < 270)) odd.push('出勤時刻');
+    if (oM !== null && (oM < 900 || oM > 1260)) odd.push('退勤時刻');
+    if (odd.length) { row.flag = true; if (!x.note) x.note = odd.join('・') + 'がいつもと違う'; }
     if (x.note) row.note = x.note;
     n++;
   });
@@ -454,15 +461,15 @@ function onPersonChange(){
 function fileToB64(file){
   return new Promise((ok, ng) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = ng; r.readAsDataURL(file); });
 }
-function shrink(file){   // 写真は長辺2000pxのJPEGに縮小（通信量とAPIの負担を減らす）
+function shrink(file){   // 写真は長辺3000pxのJPEGに（細かい数字を読み取りやすく）
   return new Promise((ok, ng) => {
     const img = new Image(), url = URL.createObjectURL(file);
     img.onload = () => {
-      const k = Math.min(1, 2000 / Math.max(img.width, img.height));
+      const k = Math.min(1, 3000 / Math.max(img.width, img.height));
       const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
       c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
       URL.revokeObjectURL(url);
-      ok(c.toDataURL('image/jpeg', 0.85).split(',')[1]);
+      ok(c.toDataURL('image/jpeg', 0.92).split(',')[1]);
     };
     img.onerror = () => { URL.revokeObjectURL(url); ng(new Error('画像を開けませんでした')); };
     img.src = url;
