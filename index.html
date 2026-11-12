@@ -65,7 +65,7 @@ textarea{min-height:120px;font-size:14px}
 .d2{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:6px;font-size:12px;color:var(--sub)}
 .d2 b{color:var(--ink);font-variant-numeric:tabular-nums}
 .d2 .ot b{color:var(--warn)}
-.d2 .sp{display:flex;align-items:center;gap:4px}
+.d2 .sp{display:flex;align-items:center;gap:4px;white-space:nowrap}
 .d2 .sp input{width:18px;height:18px;padding:0}
 .d2 .nt{flex:1 1 100%}
 .d2 .nt input{padding:6px 8px;font-size:14px}
@@ -175,7 +175,7 @@ textarea{min-height:120px;font-size:14px}
     <h2>計算ルール</h2>
     <p class="note">
       ① 8:00〜17:00。17:00〜17:15は帰宅準備で無給。8:00前の打刻は8:00から。<br>
-      ② 研修生：午前30分・昼1時間・午後30分は無給。取れなかった日は「特例」にチェック→午前・午後は有給。<br>
+      ② 研修生：午前30分・昼1時間・午後30分は無給。取れなかった休憩に「午前休憩なし」「午後休憩なし」をチェック→その30分が有給。昼は常に無給。<br>
       ③ 一般作業員・外注作業員：午前15分・午後15分は有給、昼1時間は無給。<br>
       ④ 残業：17:15から30分区切り（17:45・18:15・18:45…）。割増と丸めはスプレッドシートの「設定」シート。<br>
       A・B：打刻直後の刻み（5:15・5:45・6:15・6:45・7:15）から。7:15より後は8:00から。<br>
@@ -231,6 +231,7 @@ const S = {
   url: LS.get('tc_url',''), key: LS.get('tc_key',''),
   wages: LS.get('tc_wages', []), cfg: LS.get('tc_cfg', { rate:1.25, round:'切り捨て' }),
   rows: []    // {date, dow, code, in, out, special, note, inHand, outHand, flag}
+              // special: false | '午前' | '午後' | true（true は旧「休憩特例」＝午前も午後も有給）
 };
 
 /* ---------- タブ ---------- */
@@ -276,6 +277,28 @@ function period(){
 function person(){ return S.wages.find(w => w.name === $('#name').value) || null; }
 function defCode(){ const p = person(); return p && p.cat === 'パート' ? 'P' : ($('#bulk').value || 'T'); }
 
+// 研修生の午前・午後休憩。列は special 1つのまま。
+// false=両方無給 / '午前'=午前だけ有給 / '午後'=午後だけ有給 / true=両方有給。
+// 旧データの special:true は両方有給。昼（12:00〜13:00）はここには含まない。
+function skipBreaks(special){
+  if (special === true || special === 1) return { am: true, pm: true };
+  const s = special == null ? '' : String(special).trim();
+  if (s === 'true' || s === 'TRUE' || s === '両方') return { am: true, pm: true };
+  if (s === '午前') return { am: true, pm: false };
+  if (s === '午後') return { am: false, pm: true };
+  return { am: false, pm: false };
+}
+function encodeSpecial(am, pm){
+  if (am && pm) return true;
+  if (am) return '午前';
+  if (pm) return '午後';
+  return false;
+}
+function canonicalSpecial(special){
+  const s = skipBreaks(special);
+  return encodeSpecial(s.am, s.pm);
+}
+
 function calcDay(r, cat){
   const code = r.code, inM = parseT(r.in), outM = parseT(r.out);
   if (!code || inM === null || outM === null) return null;
@@ -292,7 +315,11 @@ function calcDay(r, cat){
   let ded = 0;
   if (code !== 'S') {
     ded += ov(720, 780);                                   // 昼 12:00-13:00 無給（全員）
-    if (cat === '研修生' && code !== 'P' && !r.special) ded += ov(600, 630) + ov(900, 930);  // 研修生 午前・午後
+    if (cat === '研修生' && code !== 'P') {                // 研修生の午前・午後。Pは対象外
+      const sk = skipBreaks(r.special);                    // true は旧休憩特例＝両方有給
+      if (!sk.am) ded += ov(600, 630);
+      if (!sk.pm) ded += ov(900, 930);
+    }
   }
   const reg = Math.max(0, endReg - st - ded);
   let ot = 0;
@@ -347,6 +374,10 @@ function render(){
     const [, mm, dd] = r.date.split('-').map(Number);
     const dowCls = r.dow === '日' ? 'sun' : r.dow === '土' ? 'sat' : '';
     const flag = r.inHand || r.outHand || r.flag;
+    const sk = skipBreaks(r.special);
+    const breakBoxes = cat === '研修生'
+      ? `<label class="sp"><input type="checkbox" data-k="skipAm" ${sk.am?'checked':''}>午前休憩なし</label><label class="sp"><input type="checkbox" data-k="skipPm" ${sk.pm?'checked':''}>午後休憩なし</label>`
+      : '';
     const div = document.createElement('div');
     div.className = 'day' + (!r.code ? ' hol' : '') + (flag ? ' flag' : '');
     div.innerHTML = `
@@ -359,14 +390,18 @@ function render(){
       <div class="d2">
         ${r.inHand ? '<span class="badge">出勤 手書き</span>' : ''}${r.outHand ? '<span class="badge">退勤 手書き</span>' : ''}${r.flag ? '<span class="badge">要確認</span>' : ''}
         <span id="res${i}"></span>
-        ${cat === '研修生' ? `<label class="sp"><input type="checkbox" data-k="special" ${r.special?'checked':''}>休憩特例</label>` : ''}
+        ${breakBoxes}
         <div class="nt"><input data-k="note" placeholder="備考" value="${(r.note||'').replace(/"/g,'&quot;')}"></div>
       </div>`;
     div.querySelectorAll('[data-k]').forEach(inp => {
       const k = inp.dataset.k;
       const ev = (inp.tagName === 'SELECT' || inp.type === 'checkbox') ? 'change' : 'input';
       inp.addEventListener(ev, () => {
-        r[k] = inp.type === 'checkbox' ? inp.checked : inp.value;
+        if (k === 'skipAm' || k === 'skipPm') {
+          const sk = skipBreaks(r.special);
+          sk[k === 'skipAm' ? 'am' : 'pm'] = inp.checked;
+          r.special = encodeSpecial(sk.am, sk.pm);
+        } else r[k] = inp.type === 'checkbox' ? inp.checked : inp.value;
         if (k === 'code') { div.classList.toggle('hol', !r.code); if (r.code && !r.in) {} }
         if ((k === 'in' || k === 'out') && r.in && r.out && !r.code) {
           r.code = defCode(); div.querySelector('[data-k=code]').value = r.code; div.classList.remove('hol');
@@ -566,7 +601,7 @@ $('#btnSave').onclick = async () => {
   const pr = period(), rate = S.cfg.rate;
   const rows = S.rows.filter(r => r._c).map(r => {
     const c = r._c, base = c.reg / 60 * p.wage, otPay = c.ot / 60 * p.wage * (c.mult || rate);
-    return { date: r.date, dow: r.dow, code: r.code, in: r.in, out: r.out, start: fmtT(c.st), special: !!r.special,
+    return { date: r.date, dow: r.dow, code: r.code, in: r.in, out: r.out, start: fmtT(c.st), special: canonicalSpecial(r.special),
       regHM: fmtH(c.reg), otHM: fmtH(c.ot), regH: +(c.reg/60).toFixed(2), otH: +(c.ot/60).toFixed(2),
       base: Math.round(base), otPay: Math.round(otPay), total: Math.round(base + otPay),
       note: [r.note, r.inHand ? '出勤手書き' : '', r.outHand ? '退勤手書き' : ''].filter(Boolean).join(' / ') };
