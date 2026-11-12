@@ -120,7 +120,10 @@ textarea{min-height:120px;font-size:14px}
     <div id="pasteBox" class="hide">
       <label>1行に1日。例）9/17 06:52-20:45</label>
       <textarea id="pasteText" placeholder="9/16 7:30-17:15&#10;9/17 06:52-20:45"></textarea>
-      <button class="btn" id="btnParse" style="margin-top:8px">反映する</button>
+      <div class="btns">
+        <button class="btn" id="btnParse">反映する</button>
+        <button class="btn ghost" id="btnPasteClear">テキストを消す</button>
+      </div>
     </div>
     <div class="btns">
       <button class="btn ghost" id="btnLoad">保存済みを開く</button>
@@ -410,10 +413,11 @@ function parsePaste(txt){
   const out = [];
   txt.split(/\n/).forEach(line => {
     const t = line.replace(/[０-９]/g, d => String.fromCharCode(d.charCodeAt(0) - 0xFEE0));
-    const md = t.match(/(\d{1,2})\s*[\/月]\s*(\d{1,2})/);
-    if (!md) return;
+    const md = t.match(/(?<![\d\/])(\d{1,2})\s*[\/月]\s*(\d{1,2})(?![\d\/])/);   // 2026/10/16 のような年付きは無視
+    if (!md || +md[1] < 1 || +md[1] > 12 || +md[2] < 1 || +md[2] > 31) return;
     const rest = t.slice(md.index + md[0].length);
     const times = rest.match(/\d{1,2}[:：]\d{2}/g) || [];
+    if (!times.length) return;                                   // 見出し行・期間の行は飛ばす
     out.push({ m: +md[1], d: +md[2], in: times[0] || '', out: times[1] || '',
       inHand: /手書き/.test(rest) && !/退勤手書き/.test(rest),
       outHand: /退勤手書き/.test(rest) || (/手書き/.test(rest) && times.length > 1 && rest.indexOf('手書き') > rest.indexOf(times[1])),
@@ -506,12 +510,30 @@ $('#file').onchange = async e => {
 $('#btnPaste').onclick = () => $('#pasteBox').classList.toggle('hide');
 $('#btnParse').onclick = () => {
   if (!$('#name').value) return msg('#msgIn', 'err', '先に氏名を選んでください');
-  const n = applyDays(parsePaste($('#pasteText').value));
-  msg('#msgIn', n ? 'ok' : 'err', n ? `${n}日分を反映しました` : '日付と時刻が読み取れませんでした');
+  const list = parsePaste($('#pasteText').value);
+  if (!list.length) return msg('#msgIn', 'err', '日付と時刻が読み取れませんでした（例：10/17 07:14-16:47）');
+  // 貼った日付が今の期間外なら、その日付の給与期間（16日〜翌月15日）に自動で切り替える
+  let switched = '';
+  const inPeriod = x => S.rows.some(r => { const [, mm, dd] = r.date.split('-').map(Number); return mm === x.m && dd === x.d; });
+  if (!list.some(inPeriod)) {
+    const f = list[0], cur = period().s;
+    let y = cur.getFullYear(), m = f.d >= 16 ? f.m : f.m - 1;
+    if (m < 1) m += 12;
+    if (m < cur.getMonth() + 1 - 6) y++; else if (m > cur.getMonth() + 1 + 6) y--;
+    $('#month').value = y + '-' + pad(m);
+    LS.set('tc_month', $('#month').value); showPeriod(); loadDraft();
+    switched = `期間を ${period().start.replace(/-/g,'/')}〜${period().end.replace(/-/g,'/')} に切り替えました。`;
+  }
+  const n = applyDays(list);
+  const out = list.length - n;
+  msg('#msgIn', n ? 'ok' : 'err', n
+    ? `${switched}${n}日分を反映しました` + (out ? `（期間外の ${out}日分は入りません）` : '')
+    : '日付が給与期間に入っていません。期間を確認してください');
 };
+$('#btnPasteClear').onclick = () => { $('#pasteText').value = ''; $('#pasteText').focus(); };
 $('#btnClear').onclick = () => {
   if (!confirm('この期間の入力を消しますか？（保存済みのデータは消えません）')) return;
-  S.rows = blankRows(); render(); msg('#msgIn', 'ok', 'クリアしました');
+  S.rows = blankRows(); render(); $('#pasteText').value = ''; msg('#msgIn', 'ok', 'クリアしました');
 };
 $('#btnLoad').onclick = async () => {
   if (!$('#name').value) return msg('#msgIn', 'err', '先に氏名を選んでください');
