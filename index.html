@@ -174,7 +174,7 @@ textarea{min-height:120px;font-size:14px}
   <div class="card">
     <h2>計算ルール</h2>
     <p class="note">
-      ① 8:00〜17:15（17:00〜17:15は整理整頓）。8:00前の打刻は8:00から。<br>
+      ① 8:00〜17:00。17:00〜17:15は帰宅準備で無給。8:00前の打刻は8:00から。<br>
       ② 研修生：午前30分・昼1時間・午後30分は無給。取れなかった日は「特例」にチェック→午前・午後は有給。<br>
       ③ 一般作業員・外注作業員：午前15分・午後15分は有給、昼1時間は無給。<br>
       ④ 残業：17:15から30分区切り（17:45・18:15・18:45…）。割増と丸めはスプレッドシートの「設定」シート。<br>
@@ -285,7 +285,9 @@ function calcDay(r, cat){
   else if (code === 'S') st = inM <= 450 ? Math.max(300, Math.ceil(inM / 30) * 30) : Math.max(480, inM);
   else if (code === 'P') st = Math.max(540, inM);                       // パート 9:00から
   else return null;
-  const endReg = code === 'S' ? Math.min(outM, 780) : code === 'P' ? Math.min(outM, 960) : Math.min(outM, 1035);
+  // 定時の終わり。S=13:00(780)、P=16:00(960)、T・A・B=17:00(1020)。
+  // 17:00〜17:15は帰宅準備で無給（定時にも残業にも入れない）。
+  const endReg = code === 'S' ? Math.min(outM, 780) : code === 'P' ? Math.min(outM, 960) : Math.min(outM, 1020);
   const ov = (a, b) => Math.max(0, Math.min(endReg, b) - Math.max(st, a));
   let ded = 0;
   if (code !== 'S') {
@@ -295,7 +297,7 @@ function calcDay(r, cat){
   const reg = Math.max(0, endReg - st - ded);
   let ot = 0;
   if (code !== 'S') {
-    const raw = Math.max(0, outM - (code === 'P' ? 960 : 1035));   // P は16:00から延長（割増なし）
+    const raw = Math.max(0, outM - (code === 'P' ? 960 : 1035));   // P は16:00から延長（割増なし）。T/A/Bの残業起点は17:15のまま
     ot = S.cfg.round === '切り上げ' ? Math.ceil(raw / 30) * 30 : Math.floor(raw / 30) * 30;
   }
   return { st, reg, ot, mult: code === 'P' ? 1 : null };
