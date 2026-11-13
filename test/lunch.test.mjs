@@ -68,10 +68,12 @@ function extractFunction(src, name) {
   throw new Error('関数が閉じていない: ' + name);
 }
 
-const names = ['parseT', 'skipBreaks', 'clampLunch', 'stripLunchMark', 'parseLunchNote', 'withLunchMark', 'savedNote', 'lunchFromDraft', 'lunchFromSheet', 'calcDay'];
-const src = "'use strict';\n" + names.map(name => extractFunction(html, name)).join('\n\n');
+const names = ['parseT', 'skipBreaks', 'clampLunch', 'stripLunchMark', 'parseLunchNote', 'withLunchMark', 'savedNote', 'lunchFromDraft', 'lunchFromSheet', 'calcDay', 'lunchSelect'];
+const choice = html.match(/const LUNCH_CHOICES = \[[0-9, ]+\];/);
+if (!choice) throw new Error('LUNCH_CHOICES が見つからない');
+const src = "'use strict';\n" + choice[0] + '\n' + names.map(name => extractFunction(html, name)).join('\n\n');
 const api = new Function('S', src + '\nreturn { ' + names.join(', ') + ' };')({ cfg: { rate: 1.25, round: '切り捨て' } });
-const { calcDay, clampLunch, parseLunchNote, savedNote, lunchFromDraft, lunchFromSheet } = api;
+const { calcDay, clampLunch, parseLunchNote, savedNote, lunchFromDraft, lunchFromSheet, lunchSelect } = api;
 
 let failed = 0;
 function check(label, got, reg, ot) {
@@ -93,7 +95,7 @@ function day(cat, row) {
 console.log('--- 指定の分 ---');
 check('P 9:00-16:00 昼60', day('パート', { code: 'P', in: '9:00', out: '16:00', lunch: 60 }), 360, 0);
 check('P 9:00-16:00 昼30', day('パート', { code: 'P', in: '9:00', out: '16:00', lunch: 30 }), 390, 0);
-check('P 9:00-16:00 昼10', day('パート', { code: 'P', in: '9:00', out: '16:00', lunch: 10 }), 410, 0);
+check('P 9:00-16:00 昼0', day('パート', { code: 'P', in: '9:00', out: '16:00', lunch: 0 }), 420, 0);
 check('一般 T 8:00-17:00 昼60', day('一般作業員', { code: 'T', in: '8:00', out: '17:00', lunch: 60 }), 480, 0);
 check('一般 T 8:00-17:00 昼30', day('一般作業員', { code: 'T', in: '8:00', out: '17:00', lunch: 30 }), 510, 0);
 check('研修生 T 8:00-17:00 昼60', day('研修生', { code: 'T', in: '8:00', out: '17:00', lunch: 60, special: false }), 420, 0);
@@ -162,9 +164,23 @@ const keys = [...html.slice(saveAt, saveEnd).matchAll(/\b([A-Za-z_][A-Za-z0-9_]*
 const expectKeys = ['date', 'dow', 'code', 'in', 'out', 'start', 'special', 'regHM', 'otHM', 'regH', 'otH', 'base', 'otPay', 'total', 'note'];
 checkEq('勤怠明細の列', keys.join(','), expectKeys.join(','));
 checkEq('列に lunch は無い', keys.includes('lunch'), false);
-checkEq('説明文に初期値60分が3か所', html.split('昼休憩は取れた分だけ無給（初期値60分）').length - 1, 3);
+const help = '昼休憩は取れた分だけ無給（0分・30分・60分、初期値60分）';
+checkEq('説明文に0・30・60と初期値60分が3か所', html.split(help).length - 1, 3);
+checkEq('選択肢の定数', choice[0], 'const LUNCH_CHOICES = [0, 30, 60];');
 checkEq('午前休憩なしが残っている', html.includes('午前休憩なし'), true);
 checkEq('午後休憩なしが残っている', html.includes('午後休憩なし'), true);
+
+checkEq('通常の選択肢は0・30・60', lunchSelect(60), '<option value="0">0分</option><option value="30">30分</option><option value="60" selected>60分</option>');
+checkEq('未設定も60が選択', lunchSelect(''), '<option value="0">0分</option><option value="30">30分</option><option value="60" selected>60分</option>');
+checkEq('0分を選んだ行', lunchSelect(0), '<option value="0" selected>0分</option><option value="30">30分</option><option value="60">60分</option>');
+checkEq('30分を選んだ行', lunchSelect(30), '<option value="0">0分</option><option value="30" selected>30分</option><option value="60">60分</option>');
+for (const n of [10, 15, 20, 40, 45, 50]) {
+  const vals = [0, n, 30, 60].sort((a, b) => a - b);
+  const htmlOpt = vals.map(v => `<option value="${v}"${v === n ? ' selected' : ''}>${v}分</option>`).join('');
+  checkEq('保存済みの' + n + '分はその行だけ残す', lunchSelect(n), htmlOpt);
+}
+check('P 9:00-16:00 昼10（保存した分のまま）', day('パート', { code: 'P', in: '9:00', out: '16:00', lunch: 10 }), 410, 0);
+check('一般 T 8:00-17:00 昼15（保存した分のまま）', day('一般作業員', { code: 'T', in: '8:00', out: '17:00', lunch: 15 }), 525, 0);
 
 if (failed) {
   console.log('失敗 ' + failed + ' 件');
